@@ -30,20 +30,69 @@ BackServer/
 
 ## Prerequisites
 
-- Python 3.8+
-- Docker (for Neo4j)
-- Google Gemini API key ([Get one free](https://makersuite.google.com/app/apikey))
-- BurpSuite (optional, for live traffic analysis)
+- **Option 1: Docker Compose (Recommended)** 🐳
+  - Docker Desktop ([Download](https://www.docker.com/products/docker-desktop))
+  - Google Gemini API key ([Get one free](https://makersuite.google.com/app/apikey))
+  
+- **Option 2: Local Development**
+  - Python 3.8+
+  - Docker (for Neo4j only)
+  - Google Gemini API key
+  - BurpSuite (optional, for live traffic analysis)
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### Option A: Docker Compose (Recommended) 🐳
+
+**Fastest way to get started - everything in containers!**
+
+#### 1. Configure Environment
+
+Edit `.env` file:
+
+```env
+GEMINI_API_KEY=your_actual_gemini_api_key_here
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=testpassword
+BATCH_SIZE=5
+```
+
+#### 2. Start All Services
+
+```powershell
+# Build and start all containers
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+#### 3. Access Services
+
+- **Flask API**: <http://localhost:5000>
+- **Neo4j Browser**: <http://localhost:7474>
+- **Health Check**: <http://localhost:5000/health>
+
+#### 4. Stop Services
+
+```powershell
+docker-compose down
+```
+
+**📖 See [DOCKER.md](DOCKER.md) for complete Docker guide**
+
+---
+
+### Option B: Local Development
+
+#### 1. Install Dependencies
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-### 2. Start Neo4j Container
+#### 2. Start Neo4j Container
 
 ```powershell
 # Build and run Neo4j
@@ -53,7 +102,7 @@ docker run -d -p 7474:7474 -p 7687:7687 --name neo4j-container neo4j-custom
 # Wait ~10 seconds for Neo4j to start
 ```
 
-### 3. Configure Environment Variables
+#### 3. Configure Environment Variables
 
 Create or edit `.env` file in the project root:
 
@@ -76,7 +125,7 @@ SERVER_PORT=5000
 
 **⚠️ Important**: Get your free Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
 
-### 4. Start the Server
+#### 4. Start the Server
 
 ```powershell
 python main.py --mode server

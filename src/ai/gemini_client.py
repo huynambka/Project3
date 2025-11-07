@@ -58,7 +58,7 @@ Now convert this data:"""
             self.model = None
         else:
             genai.configure(api_key=settings.gemini_api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
             logger.info("Gemini client initialized")
 
     def convert_batch_to_graph_data(
