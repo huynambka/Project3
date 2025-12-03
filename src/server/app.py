@@ -32,6 +32,10 @@ def create_app(
     @app.route('/analyze', methods=['POST'])
     def analyze():
         """Receive HTTP traffic from BurpSuite extension."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         try:
             data = request.get_json()
 
@@ -41,6 +45,11 @@ def create_app(
             request_raw = data['request']
             response_raw = data['response']
             timestamp = data.get('timestamp', '')
+
+            # Log received request
+            logger.info(
+                f"Received HTTP request from BurpSuite - timestamp: {timestamp}"
+            )
 
             if not batch_processor:
                 return jsonify({"error": "Batch processor not configured"}), 503

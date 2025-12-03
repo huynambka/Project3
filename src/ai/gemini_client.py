@@ -83,10 +83,15 @@ Now convert this data:"""
             # Create full prompt
             full_prompt = f"{self.CONVERSION_PROMPT}\n\n{batch_text}"
 
-            logger.info(f"Sending batch of {len(batch)} messages to Gemini...")
+            logger.info(
+                f"Sending batch of {len(batch)} messages to Gemini AI for conversion..."
+            )
+            logger.debug(f"Prompt length: {len(full_prompt)} characters")
 
             # Call Gemini API
             response = self.model.generate_content(full_prompt)
+
+            logger.info(f"Received response from Gemini AI")
 
             if not response or not response.text:
                 logger.error("Empty response from Gemini")

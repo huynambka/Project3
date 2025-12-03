@@ -26,6 +26,8 @@ class GeminiGraphLoader:
 
         nodes = data['nodes']
 
+        logger.info("Starting to write graph data to Neo4j database...")
+
         # Load in order: endpoints first, then requests, responses, parameters, sessions, resources
         self._load_endpoints(nodes.get('endpoints', []))
         self._load_requests(nodes.get('requests', []))
@@ -34,10 +36,14 @@ class GeminiGraphLoader:
         self._load_sessions(nodes.get('sessions', []))
         self._load_resources(nodes.get('resources', []))
 
-        logger.info("Graph data loaded successfully")
+        logger.info("Graph data successfully written to Neo4j database")
 
     def _load_endpoints(self, endpoints: List[Dict[str, Any]]) -> None:
         """Load endpoint nodes."""
+        if endpoints:
+            logger.info(
+                f"Writing {len(endpoints)} endpoint nodes to database..."
+            )
         for ep in endpoints:
             try:
                 self.client.create_node(
@@ -54,6 +60,8 @@ class GeminiGraphLoader:
 
     def _load_requests(self, requests: List[Dict[str, Any]]) -> None:
         """Load request nodes and relationships to endpoints."""
+        if requests:
+            logger.info(f"Writing {len(requests)} request nodes to database...")
         for req in requests:
             try:
                 # Create request node
@@ -80,6 +88,10 @@ class GeminiGraphLoader:
 
     def _load_responses(self, responses: List[Dict[str, Any]]) -> None:
         """Load response nodes and relationships to requests."""
+        if responses:
+            logger.info(
+                f"Writing {len(responses)} response nodes to database..."
+            )
         for resp in responses:
             try:
                 # Create response node
@@ -106,6 +118,10 @@ class GeminiGraphLoader:
 
     def _load_parameters(self, parameters: List[Dict[str, Any]]) -> None:
         """Load parameter nodes and relationships to requests."""
+        if parameters:
+            logger.info(
+                f"Writing {len(parameters)} parameter nodes to database..."
+            )
         for param in parameters:
             try:
                 # Create parameter node
@@ -133,6 +149,8 @@ class GeminiGraphLoader:
 
     def _load_sessions(self, sessions: List[Dict[str, Any]]) -> None:
         """Load user session nodes."""
+        if sessions:
+            logger.info(f"Writing {len(sessions)} session nodes to database...")
         for session in sessions:
             try:
                 self.client.create_node(
@@ -149,6 +167,10 @@ class GeminiGraphLoader:
 
     def _load_resources(self, resources: List[Dict[str, Any]]) -> None:
         """Load resource nodes and link to sessions."""
+        if resources:
+            logger.info(
+                f"Writing {len(resources)} resource nodes to database..."
+            )
         for resource in resources:
             try:
                 props = {
