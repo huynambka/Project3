@@ -118,18 +118,18 @@ public class Extension implements BurpExtension {
         infoText.setEditable(false);
         infoText.setBackground(mainPanel.getBackground());
         infoText.setText(
-            "This extension monitors Burp Suite's proxy history and forwards raw HTTP\n" +
-            "request/response pairs to your configured processing server.\n\n" +
-            "Features:\n" +
-            "• Automatically detects new proxy history entries\n" +
-            "• Filters out JavaScript and CSS files\n" +
-            "• Sends data as JSON POST requests\n\n" +
-            "The server will receive JSON with the following structure:\n" +
-            "{\n" +
-            "  \"request\": \"<raw HTTP request>\",\n" +
-            "  \"response\": \"<raw HTTP response>\",\n" +
-            "  \"timestamp\": <milliseconds>\n" +
-            "}"
+                "This extension monitors Burp Suite's proxy history and forwards raw HTTP\n" +
+                        "request/response pairs to your configured processing server.\n\n" +
+                        "Features:\n" +
+                        "• Automatically detects new proxy history entries\n" +
+                        "• Filters out JavaScript and CSS files\n" +
+                        "• Sends data as JSON POST requests\n\n" +
+                        "The server will receive JSON with the following structure:\n" +
+                        "{\n" +
+                        "  \"request\": \"<raw HTTP request>\",\n" +
+                        "  \"response\": \"<raw HTTP response>\",\n" +
+                        "  \"timestamp\": <milliseconds>\n" +
+                        "}"
         );
         infoText.setFont(new Font("Monospaced", Font.PLAIN, 12));
         infoPanel.add(infoText);
@@ -243,9 +243,9 @@ public class Extension implements BurpExtension {
 
                 // Filter out JavaScript content types
                 if (contentType.contains("javascript") ||
-                    contentType.contains("application/x-javascript") ||
-                    contentType.contains("text/javascript") ||
-                    contentType.contains("application/ecmascript")) {
+                        contentType.contains("application/x-javascript") ||
+                        contentType.contains("text/javascript") ||
+                        contentType.contains("application/ecmascript")) {
                     logging.logToOutput("Filtered out JS content type: " + url);
                     return true;
                 }
