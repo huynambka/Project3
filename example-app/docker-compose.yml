@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+    api:
+        build: .
+        ports:
+            - "1337:3000"
+        environment:
+            - NODE_ENV=development
+            - JWT_SECRET=your-secret-key-change-in-production
+        volumes:
+            - .:/app
+            - /app/node_modules
+        command: npm start
