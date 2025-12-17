@@ -1,0 +1,401 @@
+# Rule-based parsing configuration for HTTP Request to Graph conversion
+# This file defines patterns and rules for converting HTTP requests to Neo4j graph structure
+
+# Parameter classification rules
+parameter_patterns:
+  ID:
+    patterns:
+      - '\b(id|ID|Id)\b'
+      - '_id$'
+      - 'Id$'
+      - '^id'
+    description: "Identifier parameters"
+    risk_level: high
+    
+  USER:
+    patterns:
+      - '\b(user|userId|user_id|username|uid|user_name)\b'
+      - '^user'
+      - 'User'
+    description: "User-related parameters"
+    risk_level: high
+    
+  RESOURCE:
+    patterns:
+      - '\b(resource|resourceId|resource_id)\b'
+      - '\b(item|itemId|item_id)\b'
+      - '\b(object|objectId|object_id)\b'
+    description: "Resource identifiers"
+    risk_level: medium
+    
+  FILE:
+    patterns:
+      - '\b(file|filename|filepath|file_id|fileId)\b'
+      - '\b(path|document|doc|docId|doc_id)\b'
+      - '\b(upload|download)\b'
+    description: "File/document parameters"
+    risk_level: high
+    
+  ACCOUNT:
+    patterns:
+      - '\b(account|accountId|account_id)\b'
+      - '\b(profile|profileId|profile_id)\b'
+      - '\b(wallet|balance)\b'
+    description: "Account identifiers"
+    risk_level: high
+    
+  ORDER:
+    patterns:
+      - '\b(order|orderId|order_id)\b'
+      - '\b(transaction|transactionId|transaction_id)\b'
+      - '\b(payment|paymentId|payment_id)\b'
+    description: "Order/transaction identifiers"
+    risk_level: high
+    
+  SESSION:
+    patterns:
+      - '\b(session|sessionId|session_id)\b'
+      - '\b(token|access_token|refresh_token)\b'
+      - '\b(jwt|bearer)\b'
+    description: "Session/token parameters"
+    risk_level: critical
+    
+  EMAIL:
+    patterns:
+      - '\b(email|mail|e_mail)\b'
+      - '@'
+    description: "Email parameters"
+    risk_level: medium
+    
+  PHONE:
+    patterns:
+      - '\b(phone|telephone|mobile|tel)\b'
+    description: "Phone parameters"
+    risk_level: medium
+    
+  GENERIC:
+    patterns:
+      - '.*'
+    description: "Generic parameters"
+    risk_level: low
+
+# HTTP header classification
+header_patterns:
+  AUTH:
+    headers:
+      - Authorization
+      - Cookie
+      - X-API-Key
+      - X-Auth-Token
+      - X-Access-Token
+      - Bearer
+      - X-Session-ID
+      - X-CSRF-Token
+      - Authentication
+    description: "Authentication headers"
+    is_sensitive: true
+    
+  CORS:
+    headers:
+      - Origin
+      - Access-Control-Request-Method
+      - Access-Control-Request-Headers
+      - Access-Control-Allow-Origin
+      - Access-Control-Allow-Credentials
+    description: "CORS headers"
+    is_sensitive: false
+    
+  CONTENT:
+    headers:
+      - Content-Type
+      - Content-Length
+      - Content-Encoding
+      - Content-Disposition
+    description: "Content headers"
+    is_sensitive: false
+    
+  USER_AGENT:
+    headers:
+      - User-Agent
+      - Accept
+      - Accept-Language
+      - Accept-Encoding
+      - Referer
+    description: "Client information headers"
+    is_sensitive: false
+    
+  CACHE:
+    headers:
+      - Cache-Control
+      - ETag
+      - If-None-Match
+      - If-Modified-Since
+    description: "Cache headers"
+    is_sensitive: false
+
+# IDOR vulnerability detection rules
+idor_detection_rules:
+  - name: "Direct ID with Authentication"
+    conditions:
+      - type: parameter_with_label
+        labels: [ID, USER, RESOURCE, ACCOUNT, ORDER]
+      - type: has_auth_header
+        required: true
+    risk_level: high
+    confidence: 0.8
+    description: "ID parameter accessed with authentication - potential IDOR vulnerability"
+    remediation: "Implement authorization checks to verify user owns the resource"
+    
+  - name: "Sequential ID Pattern"
+    conditions:
+      - type: parameter_is_numeric
+        labels: [ID, USER, RESOURCE, ORDER]
+      - type: value_is_sequential
+        threshold: 5
+    risk_level: medium
+    confidence: 0.6
+    description: "Sequential numeric IDs - easy to enumerate and guess"
+    remediation: "Use UUIDs or non-sequential identifiers"
+    
+  - name: "Predictable Resource Access"
+    conditions:
+      - type: parameter_with_label
+        labels: [FILE, RESOURCE]
+      - type: no_authorization_check
+        required: true
+    risk_level: critical
+    confidence: 0.9
+    description: "Resource access without proper authorization headers"
+    remediation: "Add authentication and authorization checks"
+    
+  - name: "Cross-User Data Access"
+    conditions:
+      - type: multiple_user_ids
+        in_same_request: true
+      - type: has_auth_header
+        required: true
+    risk_level: high
+    confidence: 0.7
+    description: "Request accessing multiple user IDs - potential privilege escalation"
+    remediation: "Verify all user IDs belong to authenticated user"
+    
+  - name: "Sensitive Endpoint without Auth"
+    conditions:
+      - type: sensitive_endpoint
+        methods: [PUT, DELETE, PATCH]
+      - type: no_auth_header
+        required: true
+    risk_level: critical
+    confidence: 0.95
+    description: "Sensitive operation without authentication"
+    remediation: "Require authentication for all sensitive operations"
+
+# HTTP method risk levels
+http_methods:
+  GET:
+    risk_level: low
+    description: "Read operation"
+    requires_auth: false
+  POST:
+    risk_level: medium
+    description: "Create operation"
+    requires_auth: true
+  PUT:
+    risk_level: high
+    description: "Update operation"
+    requires_auth: true
+  PATCH:
+    risk_level: high
+    description: "Partial update operation"
+    requires_auth: true
+  DELETE:
+    risk_level: critical
+    description: "Delete operation"
+    requires_auth: true
+  HEAD:
+    risk_level: low
+    description: "Metadata operation"
+    requires_auth: false
+  OPTIONS:
+    risk_level: low
+    description: "CORS preflight"
+    requires_auth: false
+
+# Endpoint pattern matching
+endpoint_patterns:
+  - pattern: '/api/users?/\d+/?'
+    type: USER_ENDPOINT
+    risk_level: high
+    description: "Direct user access endpoint"
+    requires_auth: true
+    
+  - pattern: '/api/admin/'
+    type: ADMIN_ENDPOINT
+    risk_level: critical
+    description: "Administrative endpoint"
+    requires_auth: true
+    
+  - pattern: '/api/files?/\d+/?'
+    type: FILE_ENDPOINT
+    risk_level: high
+    description: "File access endpoint"
+    requires_auth: true
+    
+  - pattern: '/api/orders?/\d+/?'
+    type: ORDER_ENDPOINT
+    risk_level: high
+    description: "Order access endpoint"
+    requires_auth: true
+    
+  - pattern: '/api/profiles?/\d+/?'
+    type: PROFILE_ENDPOINT
+    risk_level: high
+    description: "Profile access endpoint"
+    requires_auth: true
+    
+  - pattern: '/api/documents?/\d+/?'
+    type: DOCUMENT_ENDPOINT
+    risk_level: high
+    description: "Document access endpoint"
+    requires_auth: true
+    
+  - pattern: '/api/public/'
+    type: PUBLIC_ENDPOINT
+    risk_level: low
+    description: "Public endpoint"
+    requires_auth: false
+    
+  - pattern: '/api/auth/'
+    type: AUTH_ENDPOINT
+    risk_level: medium
+    description: "Authentication endpoint"
+    requires_auth: false
+
+# Graph node label templates
+node_templates:
+  Request:
+    properties:
+      - method
+      - url
+      - timestamp
+      - protocol
+    additional_labels:
+      - HttpRequest
+    description: "HTTP Request node"
+      
+  Parameter:
+    properties:
+      - name
+      - value
+      - type
+      - location
+      - risk_level
+    additional_labels:
+      - QueryParam
+    description: "URL parameter node"
+      
+  Header:
+    properties:
+      - name
+      - value
+      - is_sensitive
+      - category
+    additional_labels:
+      - HttpHeader
+    description: "HTTP header node"
+      
+  Body:
+    properties:
+      - content_type
+      - size
+    additional_labels:
+      - RequestBody
+    description: "Request body node"
+      
+  BodyField:
+    properties:
+      - name
+      - value
+      - type
+      - path
+      - risk_level
+    additional_labels:
+      - JsonField
+    description: "Body field node"
+      
+  Endpoint:
+    properties:
+      - path
+      - method
+      - domain
+      - type
+      - risk_level
+      - requires_auth
+    additional_labels:
+      - ApiEndpoint
+    description: "API endpoint node"
+
+# Relationship type definitions
+relationship_types:
+  HAS_PARAMETER:
+    description: "Request has parameter"
+    properties:
+      - position
+      - required
+      
+  HAS_HEADER:
+    description: "Request has header"
+    properties:
+      - order
+      
+  HAS_BODY:
+    description: "Request has body"
+    properties:
+      - encoding
+      
+  HAS_FIELD:
+    description: "Body has field"
+    properties:
+      - depth
+      
+  TARGETS:
+    description: "Request targets endpoint"
+    properties:
+      - timestamp
+      
+  POTENTIAL_IDOR:
+    description: "Potential IDOR vulnerability detected"
+    properties:
+      - risk_level
+      - reason
+      - confidence
+      - rule_name
+      - remediation
+      
+  ACCESSES_RESOURCE:
+    description: "Parameter accesses resource"
+    properties:
+      - access_type
+      - authorized
+
+# Risk assessment thresholds
+risk_assessment:
+  score_weights:
+    critical: 10
+    high: 5
+    medium: 2
+    low: 1
+  
+  severity_levels:
+    - threshold: 0
+      level: low
+      color: green
+    - threshold: 5
+      level: medium
+      color: yellow
+    - threshold: 15
+      level: high
+      color: orange
+    - threshold: 30
+      level: critical
+      color: red

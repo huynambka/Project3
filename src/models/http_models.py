@@ -14,6 +14,24 @@ class HTTPRequest:
     headers: Dict[str, str]
     body: Optional[Any] = None
     raw: str = ""
+    timestamp: str = ""
+
+    @property
+    def url(self) -> str:
+        """Get full URL from host header and path."""
+        host = self.headers.get("Host", "unknown")
+        # Determine protocol (default to http)
+        protocol = (
+            "https"
+            if self.headers.get("X-Forwarded-Proto") == "https"
+            else "http"
+        )
+        return f"{protocol}://{host}{self.path}"
+
+    @property
+    def protocol(self) -> str:
+        """Get HTTP protocol version."""
+        return self.version
 
     @property
     def has_json_body(self) -> bool:

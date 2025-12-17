@@ -12,4 +12,4 @@ docker compose up -d --build
 
 sleep 10
 
-docker compose -f examples/docker-compose.yml up -d --build
+docker compose -f example-app/docker-compose.yml up -d --build

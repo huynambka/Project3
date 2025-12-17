@@ -10,7 +10,7 @@ class HTTPParser:
     """Parse raw HTTP request and response strings."""
 
     @staticmethod
-    def parse_request(raw: str) -> HTTPRequest:
+    def parse_request(raw: str, timestamp: str = "") -> HTTPRequest:
         """Parse raw HTTP request string."""
         lines = raw.split('\r\n')
 
@@ -46,6 +46,7 @@ class HTTPParser:
             headers=headers,
             body=body,
             raw=raw,
+            timestamp=timestamp,
         )
 
     @staticmethod

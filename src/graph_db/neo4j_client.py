@@ -120,6 +120,21 @@ class Neo4jClient:
             result = session.run(query, limit=limit)
             return [dict(record) for record in result]
 
+    def execute_query(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Execute a Cypher query and return results.
+        
+        Args:
+            query: Cypher query string
+            parameters: Query parameters
+            
+        Returns:
+            List of result records as dictionaries
+        """
+        with self.driver.session() as session:
+            result = session.run(query, parameters or {})
+            return [dict(record) for record in result]
+
     @staticmethod
     def _serialize_properties(props: Dict[str, Any]) -> Dict[str, Any]:
         """Convert nested dicts/lists to JSON strings for Neo4j compatibility."""

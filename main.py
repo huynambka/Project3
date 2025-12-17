@@ -5,12 +5,12 @@ import logging
 import sys
 from src.config import get_settings
 from src.utils import setup_logging
+from src.utils.batch_processor import BatchProcessor
 from src.graph_db import Neo4jClient, GraphBuilder
+from src.graph_db.rule_based_loader import RuleBasedGraphLoader
 from src.server import create_app, run_server
 from src.parsers import HTTPParser
 from src.models import HTTPMessage
-from src.ai import GeminiClient, BatchProcessor
-from src.ai.gemini_graph_loader import GeminiGraphLoader
 
 logger = logging.getLogger(__name__)
 
@@ -59,42 +59,24 @@ def main():
 
 
 def run_server_mode(settings, neo4j_client: Neo4jClient):
-    """Run Flask server to receive traffic from BurpSuite with AI batch processing."""
+    """Run Flask server to receive traffic from BurpSuite with rule-based parsing."""
     logger.info(
         f"Starting server on {settings.server_host}:{settings.server_port}"
     )
-    logger.info(f"Batch size: {settings.batch_size} messages")
+    logger.info("Using RULE-BASED parsing (no AI dependency)")
+    logger.info("Processing requests in REAL-TIME (no batching needed)")
 
     # Connect to Neo4j and create constraints
     neo4j_client.connect()
     neo4j_client.create_constraints()
     logger.info("Neo4j constraints created")
 
-    # Initialize Gemini client
-    gemini_client = GeminiClient(settings)
-    graph_loader = GeminiGraphLoader(neo4j_client)
-
-    # Define batch processing callback
-    def process_batch(batch):
-        """Process a complete batch of messages."""
-        logger.info(f"Processing batch of {len(batch)} messages with Gemini...")
-
-        # Convert batch to graph data using Gemini
-        graph_data = gemini_client.convert_batch_to_graph_data(batch)
-
-        if graph_data:
-            # Load into Neo4j
-            logger.info("Loading graph data into Neo4j...")
-            graph_loader.load_graph_data(graph_data)
-            logger.info("Batch processing complete!")
-        else:
-            logger.error("Failed to convert batch to graph data")
-
-    # Create batch processor
-    batch_processor = BatchProcessor(settings, process_batch)
+    # Initialize rule-based loader
+    graph_loader = RuleBasedGraphLoader(neo4j_client, settings.rules_file_path)
+    logger.info(f"Loaded parsing rules from {settings.rules_file_path}")
 
     # Create and run Flask app
-    app = create_app(settings, batch_processor)
+    app = create_app(settings, neo4j_client, graph_loader)
     run_server(app, settings)
 
 

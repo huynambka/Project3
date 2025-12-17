@@ -24,9 +24,6 @@ class Settings:
     neo4j_user: str
     neo4j_password: str
 
-    # Google Gemini settings
-    gemini_api_key: str
-
     # Server settings
     server_host: str
     server_port: int
@@ -34,7 +31,9 @@ class Settings:
     # Application settings
     debug: bool = False
     log_level: str = "INFO"
-    batch_size: int = 5
+
+    # Rule-based parsing settings
+    rules_file_path: str = "config/parsing_rules.yaml"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -43,12 +42,13 @@ class Settings:
             neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
             neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
             neo4j_password=os.getenv("NEO4J_PASSWORD", "neo4j"),
-            gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
             server_host=os.getenv("SERVER_HOST", "0.0.0.0"),
             server_port=int(os.getenv("SERVER_PORT", "5000")),
             debug=os.getenv("DEBUG", "false").lower() == "true",
             log_level=os.getenv("LOG_LEVEL", "INFO"),
-            batch_size=int(os.getenv("BATCH_SIZE", "5")),
+            rules_file_path=os.getenv(
+                "RULES_FILE_PATH", "config/parsing_rules.yaml"
+            ),
         )
 
 
