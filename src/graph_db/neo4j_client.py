@@ -120,14 +120,16 @@ class Neo4jClient:
             result = session.run(query, limit=limit)
             return [dict(record) for record in result]
 
-    def execute_query(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def execute_query(
+        self, query: str, parameters: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Execute a Cypher query and return results.
-        
+
         Args:
             query: Cypher query string
             parameters: Query parameters
-            
+
         Returns:
             List of result records as dictionaries
         """
