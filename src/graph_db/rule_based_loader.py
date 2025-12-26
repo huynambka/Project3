@@ -29,6 +29,8 @@ class RuleBasedGraphLoader:
         """
         self.neo4j_client = neo4j_client
         self.parser = YAMLRuleBasedParser(rules_path)
+        # Track last request ID per user for temporal ordering
+        self.user_last_request = {}  # {user_id: (request_id, timestamp)}
         logger.info("Rule-based graph loader initialized")
 
     def load_requests(self, requests: List[HTTPRequest]) -> Dict[str, Any]:
@@ -100,6 +102,52 @@ class RuleBasedGraphLoader:
         for rel in graph_data['relationships']:
             self._create_relationship(rel)
             relationships_created += 1
+
+        # Find User node and Request node to create temporal ordering
+        request_node = None
+        user_node = None
+        
+        for node in graph_data['nodes']:
+            if 'Request' in node['labels']:
+                request_node = node
+            elif 'User' in node['labels']:
+                user_node = node
+        
+        # Create FOLLOWS relationship if this user had a previous request
+        if user_node and request_node:
+            user_id = user_node['properties'].get('user_id')
+            current_timestamp = request_node['properties'].get('timestamp', '')
+            
+            if user_id and user_id in self.user_last_request:
+                prev_request_id, prev_timestamp = self.user_last_request[user_id]
+                
+                # Calculate time delta
+                time_delta = 0
+                try:
+                    from datetime import datetime
+                    if current_timestamp and prev_timestamp:
+                        curr_dt = datetime.fromisoformat(current_timestamp.replace('Z', '+00:00'))
+                        prev_dt = datetime.fromisoformat(prev_timestamp.replace('Z', '+00:00'))
+                        time_delta = int((curr_dt - prev_dt).total_seconds())
+                except Exception:
+                    pass
+                
+                # Create FOLLOWS relationship
+                follows_rel = {
+                    'source_id': prev_request_id,
+                    'target_id': request_node['id'],
+                    'type': 'FOLLOWS',
+                    'properties': {
+                        'time_delta': time_delta,
+                        'request_sequence': 'next'
+                    }
+                }
+                self._create_relationship(follows_rel)
+                relationships_created += 1
+            
+            # Update last request for this user
+            if user_id:
+                self.user_last_request[user_id] = (request_node['id'], current_timestamp)
 
         logger.debug(
             f"Loaded request {http_request.method} {http_request.url}: "

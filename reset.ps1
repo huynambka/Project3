@@ -1,9 +1,6 @@
-docker stop $(docker ps -aq)
-docker rm $(docker ps -aq)
+docker stop idor-app idor-neo4j
+docker rm idor-app idor-neo4j
 
-docker system prune -af
-docker volume prune -f
+docker volume rm project3-idor_neo4j_data project3-idor_neo4j_logs
 
 docker compose up -d --build
-
-docker compose -f example-app/docker-compose.yml up -d --build

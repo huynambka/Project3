@@ -112,6 +112,20 @@ class YAMLRuleBasedParser:
                 }
             )
 
+            # Extract User information
+            user_nodes, user_rels = self._extract_user(
+                http_request, request_node['id']
+            )
+            nodes.extend(user_nodes)
+            relationships.extend(user_rels)
+
+            # Extract Resource information
+            resource_nodes, resource_rels = self._extract_resources(
+                http_request, request_node['id'], parsed_url
+            )
+            nodes.extend(resource_nodes)
+            relationships.extend(resource_rels)
+
             logger.info(
                 f"Parsed request: {len(nodes)} nodes, {len(relationships)} relationships"
             )
@@ -133,10 +147,6 @@ class YAMLRuleBasedParser:
     def _create_request_node(self, http_request: HTTPRequest) -> Dict[str, Any]:
         """Create Request node based on template."""
         template = self.rules['node_templates']['Request']
-        method_info = self.rules['http_methods'].get(
-            http_request.method.upper(),
-            {'risk_level': 'unknown', 'description': 'Unknown method'},
-        )
 
         node_id = f"request_{hash(http_request.url + http_request.method + str(http_request.timestamp))}"
 
@@ -145,7 +155,6 @@ class YAMLRuleBasedParser:
             'url': http_request.url,
             'timestamp': http_request.timestamp or '',
             'protocol': http_request.protocol or 'HTTP/1.1',
-            'risk_level': method_info['risk_level'],
         }
 
         return {
@@ -170,7 +179,6 @@ class YAMLRuleBasedParser:
                     if re.search(pattern, param_name, re.IGNORECASE):
                         return {
                             'type': param_type,
-                            'risk_level': config['risk_level'],
                             'description': config['description'],
                         }
                 except re.error as e:
@@ -181,7 +189,6 @@ class YAMLRuleBasedParser:
         generic = param_patterns['GENERIC']
         return {
             'type': 'GENERIC',
-            'risk_level': generic['risk_level'],
             'description': generic['description'],
         }
 
@@ -212,7 +219,6 @@ class YAMLRuleBasedParser:
                         'value': param_value,
                         'type': classification['type'],
                         'location': 'query',
-                        'risk_level': classification['risk_level'],
                     },
                 }
                 nodes.append(param_node)
@@ -228,8 +234,8 @@ class YAMLRuleBasedParser:
 
         return nodes, relationships
 
-    def _classify_header(self, header_name: str) -> Dict[str, Any]:
-        """Classify header using YAML patterns."""
+    def _classify_header(self, header_name: str) -> Optional[Dict[str, Any]]:
+        """Classify header using YAML patterns. Returns None if header doesn't match any pattern."""
         header_patterns = self.rules['header_patterns']
 
         for category, config in header_patterns.items():
@@ -240,11 +246,8 @@ class YAMLRuleBasedParser:
                     'description': config['description'],
                 }
 
-        return {
-            'category': 'OTHER',
-            'is_sensitive': False,
-            'description': 'Other header',
-        }
+        # Return None for unmatched headers - they will be skipped
+        return None
 
     def _extract_headers(
         self, http_request: HTTPRequest, request_id: str
@@ -262,14 +265,14 @@ class YAMLRuleBasedParser:
             http_request.headers.items()
         ):
             classification = self._classify_header(header_name)
+            
+            # Skip headers that don't match any defined pattern
+            if classification is None:
+                continue
 
             header_id = f"header_{hash(request_id + header_name + str(idx))}"
 
-            # Redact sensitive header values
-            if classification['is_sensitive']:
-                display_value = '[REDACTED]'
-            else:
-                display_value = str(header_value)[:100]  # Truncate long values
+            display_value = str(header_value)[:100]  # Truncate long values
 
             header_node = {
                 'id': header_id,
@@ -292,7 +295,6 @@ class YAMLRuleBasedParser:
                     'properties': {'order': idx},
                 }
             )
-
         return nodes, relationships
 
     def _extract_body(
@@ -377,7 +379,6 @@ class YAMLRuleBasedParser:
                     ),
                     'type': classification['type'],
                     'path': field_path,
-                    'risk_level': classification['risk_level'],
                 },
             }
             nodes.append(field_node)
@@ -408,14 +409,12 @@ class YAMLRuleBasedParser:
 
         # Match endpoint patterns
         endpoint_type = 'GENERIC'
-        risk_level = 'low'
         requires_auth = False
 
         for pattern_config in self.rules['endpoint_patterns']:
             try:
                 if re.match(pattern_config['pattern'], path):
                     endpoint_type = pattern_config['type']
-                    risk_level = pattern_config['risk_level']
                     requires_auth = pattern_config.get('requires_auth', False)
                     break
             except re.error as e:
@@ -435,7 +434,205 @@ class YAMLRuleBasedParser:
                 'method': method,
                 'domain': parsed_url.netloc,
                 'type': endpoint_type,
-                'risk_level': risk_level,
                 'requires_auth': requires_auth,
             },
         }
+
+    def _decode_jwt_payload(self, token: str) -> Optional[Dict[str, Any]]:
+        """Decode JWT payload (basic, without verification)."""
+        import base64
+
+        try:
+            parts = token.split('.')
+            if len(parts) != 3:
+                return None
+
+            # Decode payload (add padding if needed)
+            payload = parts[1]
+            padding = 4 - len(payload) % 4
+            if padding != 4:
+                payload += '=' * padding
+
+            decoded = base64.urlsafe_b64decode(payload)
+            return json.loads(decoded)
+        except Exception:
+            return None
+
+    def _extract_user(
+        self, http_request: HTTPRequest, request_id: str
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """Extract user information from auth headers."""
+        nodes = []
+        relationships = []
+
+        if not self.rules.get('user_extraction'):
+            return nodes, relationships
+
+        user_config = self.rules['user_extraction']
+        user_id = None
+        username = None
+        auth_method = None
+        token_preview = None
+
+        # Extract from Authorization header (JWT)
+        if user_config.get('jwt', {}).get('enabled'):
+            auth_header = http_request.headers.get('Authorization', '')
+            prefix = user_config['jwt'].get('header_prefix', 'Bearer ')
+            
+            if auth_header.startswith(prefix):
+                token = auth_header[len(prefix):]
+                token_preview = token[:20] + '...' if len(token) > 20 else token
+                payload = self._decode_jwt_payload(token)
+                
+                if payload:
+                    # Extract user_id from JWT claims
+                    for claim in user_config['jwt'].get('user_id_claims', []):
+                        if claim in payload:
+                            user_id = str(payload[claim])
+                            break
+                    
+                    # Extract username from JWT claims  
+                    for claim in user_config['jwt'].get('username_claims', []):
+                        if claim in payload:
+                            username = str(payload[claim])
+                            break
+                    
+                    if user_id or username:
+                        auth_method = 'jwt'
+
+        # Extract from Cookie header
+        if not user_id and user_config.get('cookie', {}).get('enabled'):
+            cookie_header = http_request.headers.get('Cookie', '')
+            patterns = user_config['cookie'].get('patterns', [])
+            
+            for pattern in patterns:
+                try:
+                    match = re.search(pattern, cookie_header)
+                    if match:
+                        if 'userId' in pattern or 'user_id' in pattern:
+                            user_id = match.group(1)
+                            auth_method = 'cookie'
+                        elif 'username' in pattern:
+                            username = match.group(1)
+                            auth_method = 'cookie'
+                except re.error:
+                    continue
+
+        # Create User node if we found user info
+        if user_id or username:
+            template = self.rules['node_templates'].get('User', {})
+            # Use actual user_id for deterministic node ID (avoid duplicates)
+            user_node_id = f"user_{user_id or username}"
+            
+            user_node = {
+                'id': user_node_id,
+                'labels': ['User'] + template.get('additional_labels', []),
+                'properties': {
+                    'user_id': user_id or 'unknown',
+                    'username': username or 'unknown',
+                    'auth_method': auth_method or 'unknown',
+                    'token_preview': token_preview or ''
+                },
+            }
+            nodes.append(user_node)
+
+            # Create AUTHENTICATED_AS relationship
+            relationships.append(
+                {
+                    'source_id': request_id,
+                    'target_id': user_node_id,
+                    'type': 'AUTHENTICATED_AS',
+                    'properties': {
+                        'auth_method': auth_method or 'unknown',
+                        'timestamp': http_request.timestamp or '',
+                    },
+                }
+            )
+
+        return nodes, relationships
+
+    def _extract_resources(
+        self, http_request: HTTPRequest, request_id: str, parsed_url
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """Extract resource information from URL and parameters."""
+        nodes = []
+        relationships = []
+
+        if not self.rules.get('resource_extraction'):
+            return nodes, relationships
+
+        resource_config = self.rules['resource_extraction']
+        resources_found = {}  # {(type, id): operation}
+
+        # Extract from URL patterns
+        path = parsed_url.path or '/'
+        method = http_request.method.upper()
+        
+        for pattern_config in resource_config.get('url_patterns', []):
+            try:
+                match = re.match(pattern_config['pattern'], path)
+                if match:
+                    resource_type = pattern_config['resource_type']
+                    id_group = pattern_config.get('id_group', 1)
+                    resource_id = match.group(id_group)
+                    
+                    # Determine operation from HTTP method
+                    operation_map = {
+                        'GET': 'read',
+                        'POST': 'create',
+                        'PUT': 'update',
+                        'PATCH': 'update',
+                        'DELETE': 'delete'
+                    }
+                    operation = operation_map.get(method, 'access')
+                    
+                    resources_found[(resource_type, resource_id)] = operation
+                    break
+            except (re.error, IndexError):
+                continue
+
+        # Extract from parameters
+        param_patterns = resource_config.get('parameter_patterns', {})
+        query_params = parse_qs(parsed_url.query)
+        
+        for resource_type, param_names in param_patterns.items():
+            for param_name in param_names:
+                if param_name in query_params:
+                    resource_id = query_params[param_name][0]
+                    if (resource_type, resource_id) not in resources_found:
+                        resources_found[(resource_type, resource_id)] = 'access'
+
+        # Create Resource nodes
+        template = self.rules['node_templates'].get('Resource', {})
+        
+        for (resource_type, resource_id), operation in resources_found.items():
+            # Use resource_type and ID for deterministic node ID (avoid duplicates)
+            resource_node_id = f"resource_{resource_type}_{resource_id}"
+            
+            resource_node = {
+                'id': resource_node_id,
+                'labels': ['Resource', resource_type.upper()]
+                + template.get('additional_labels', []),
+                'properties': {
+                    'resource_id': str(resource_id),
+                    'resource_type': resource_type,
+                    'operation': operation,
+                },
+            }
+            nodes.append(resource_node)
+
+            # Create ACCESSES relationship
+            relationships.append(
+                {
+                    'source_id': request_id,
+                    'target_id': resource_node_id,
+                    'type': 'ACCESSES',
+                    'properties': {
+                        'operation': operation,
+                        'access_type': 'direct',
+                    },
+                }
+            )
+
+        return nodes, relationships
+
